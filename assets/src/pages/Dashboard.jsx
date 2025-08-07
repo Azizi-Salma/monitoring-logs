@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import logsAPI from '../api/axios'; 
+import axios from 'axios'; // Importer axios directement
 import {
   Box, Grid, Card, CardContent, Typography, LinearProgress,
   Chip, IconButton, Alert, CircularProgress
@@ -10,6 +10,14 @@ import {
   PieChart, Pie, Cell
 } from 'recharts';
 import { motion } from 'framer-motion';
+
+// Créer une instance axios configurée pour le backend
+// Assurez-vous que l'URL de base correspond à celle de votre serveur backend
+const logsAPI = axios.create({
+  baseURL: 'http://127.0.0.1:8000', // URL de base de votre backend FastAPI
+  timeout: 10000, // Timeout de 10 secondes
+  // withCredentials: true, // Décommentez si vous utilisez des cookies/credentials
+});
 
 // --- Composants réutilisables (inchangés) ---
 const StatCard = ({ title, value, subtitle, icon, color, trend }) => (
@@ -75,7 +83,6 @@ const TrendChart = ({ data }) => (
           borderRadius: '8px',
           boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
         }}
-        // formatter={(value, name) => [value, name === 'logs' ? 'Total Logs' : name]} // Optionnel: formater le tooltip
       />
       {/* Utiliser 'logs' comme dataKey pour correspondre aux données transformées */}
       <Area
@@ -98,7 +105,6 @@ const TrendChart = ({ data }) => (
   </ResponsiveContainer>
 );
 
-
 const LogLevelChart = ({ data }) => (
   <ResponsiveContainer width="100%" height="100%">
     <PieChart>
@@ -110,7 +116,6 @@ const LogLevelChart = ({ data }) => (
         outerRadius={80}
         fill="#8884d8"
         dataKey="value"
-        // Afficher le nom en majuscule s'il est présent
         label={({ name, percent }) => `${name?.toUpperCase() || name} ${(percent * 100).toFixed(0)}%`}
       >
         {data.map((entry, index) => (
@@ -167,7 +172,7 @@ const Dashboard = () => {
   const [logTrendData, setLogTrendData] = useState([]);
   const [logLevelData, setLogLevelData] = useState([]);
   const [systemMetrics, setSystemMetrics] = useState([]);
-  const [lastUpdate, setLastUpdate] = useState(null); // Nouvel état pour lastUpdate
+  const [lastUpdate, setLastUpdate] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -179,11 +184,9 @@ const Dashboard = () => {
     setLoading(true);
     setError('');
     try {
-      // Appeler l'endpoint /api/stats du backend
+      // Appeler l'endpoint /stats du backend (chemin relatif car l'URL de base est définie dans logsAPI)
       const response = await logsAPI.get('/stats');
-
       console.log("Données brutes des statistiques reçues du backend:", response.data);
-
       const data = response.data;
 
       // Mettre à jour les statistiques principales
@@ -194,30 +197,26 @@ const Dashboard = () => {
         systemHealth: parseFloat(data.systemHealth) || 50,
       });
 
-      // Adapter logLevelData : s'assurer que les noms sont en majuscules si désiré
-      // (Le composant s'en occupe aussi via label, mais on le fait ici aussi pour cohérence)
+      // Adapter logLevelData
       const adaptedLogLevelData = (data.logLevelData || []).map(item => ({
         ...item,
-        name: item.name?.toUpperCase() || item.name // Mettre en majuscule
+        name: item.name?.toUpperCase() || item.name
       }));
       setLogLevelData(adaptedLogLevelData);
 
+      // Adapter logTrendData
       const adaptedLogTrendData = (data.logTrendData || []).map(item => {
-        // Agréger info, warnings, errors pour obtenir le total de logs pour le jour
         const totalLogsForDay = (item.info || 0) + (item.warnings || 0) + (item.errors || 0);
-        // Reformater la date de 'YYYY-MM-DD' à 'DD/MM'
         let formattedTime = item.time;
         if (item.time) {
             const parts = item.time.split('-');
             if (parts.length === 3) {
-                // Assumer le format est YYYY-MM-DD
-                formattedTime = `${parts[2]}/${parts[1]}`; // DD/MM
+                formattedTime = `${parts[2]}/${parts[1]}`;
             }
         }
         return {
           time: formattedTime,
           logs: totalLogsForDay
-          
         };
       });
       setLogTrendData(adaptedLogTrendData);
@@ -225,11 +224,10 @@ const Dashboard = () => {
       // Utiliser systemMetrics directement
       setSystemMetrics(data.systemMetrics || []);
 
-      // Optionnel: stocker lastUpdate
+      // Stocker lastUpdate
       if (data.lastUpdate) {
           setLastUpdate(data.lastUpdate);
       }
-
       setLoading(false);
     } catch (err) {
       console.error("Erreur détaillée lors de la récupération des statistiques:", err);
@@ -270,7 +268,6 @@ const Dashboard = () => {
           </Typography>
           <Typography variant="body1" color="text.secondary" mt={0.5}>
             Vue d'ensemble du système de monitoring des logs
-            {/* Optionnel: Afficher lastUpdate */}
             {lastUpdate && (
               <Typography variant="caption" display="block" color="text.secondary" mt={0.5}>
                 Dernière mise à jour : {new Date(lastUpdate).toLocaleString('fr-FR')}
