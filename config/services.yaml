@@ -1,0 +1,20 @@
+parameters:
+
+services:
+    _defaults:
+        autowire: true
+        autoconfigure: true
+
+    App\Service\LogService:
+        public: true
+
+    App\:
+        resource: '../src/'
+        exclude:
+            - '../src/DependencyInjection/'
+            - '../src/Entity/'
+            - '../src/Migrations/'
+            - '../src/Tests/'
+            - '../src/Kernel.php'
+
+    

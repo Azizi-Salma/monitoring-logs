@@ -1,0 +1,3 @@
+test:
+    resource: ../../src/Controller/
+    type: attribute

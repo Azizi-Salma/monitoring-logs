@@ -1,0 +1,13 @@
+api_login_check:
+    path: /api/login_check
+    methods: ['POST']
+
+app_api:
+    resource: '../src/Controller/'
+    type: attribute 
+    prefix: /api
+
+api_stats:
+    path: /stats  
+    controller: App\Controller\StatsController::stats
+    methods: [GET]
