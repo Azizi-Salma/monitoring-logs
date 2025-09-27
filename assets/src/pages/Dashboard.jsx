@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios'; // Importer axios directement
+import axios from 'axios';
 import {
   Box, Grid, Card, CardContent, Typography, LinearProgress,
   Chip, IconButton, Alert, CircularProgress
@@ -11,20 +11,19 @@ import {
 } from 'recharts';
 import { motion } from 'framer-motion';
 
-// Créer une instance axios configurée pour le backend
-// Assurez-vous que l'URL de base correspond à celle de votre serveur backend
+// === Configuration API (à adapter selon ton backend Symfony) ===
 const logsAPI = axios.create({
-  baseURL: 'http://127.0.0.1:8000', // URL de base de votre backend FastAPI
-  timeout: 10000, // Timeout de 10 secondes
-  // withCredentials: true, // Décommentez si vous utilisez des cookies/credentials
+  baseURL: 'http://127.0.0.1:8000', // 🔁 Change si ton backend est sur un autre port
+  timeout: 10000,
 });
 
-// --- Composants réutilisables (inchangés) ---
+// === Composants Réutilisables ===
 const StatCard = ({ title, value, subtitle, icon, color, trend }) => (
   <motion.div
     initial={{ opacity: 0, y: 20 }}
     animate={{ opacity: 1, y: 0 }}
     transition={{ duration: 0.5 }}
+    style={{ height: '100%' }}
   >
     <Card sx={{ height: '100%', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', border: 'none' }}>
       <CardContent sx={{ p: 3 }}>
@@ -60,7 +59,6 @@ const StatCard = ({ title, value, subtitle, icon, color, trend }) => (
   </motion.div>
 );
 
-// Composant TrendChart mis à jour pour s'attendre à 'logs' comme dataKey
 const TrendChart = ({ data }) => (
   <ResponsiveContainer width="100%" height="100%">
     <AreaChart data={data} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
@@ -75,6 +73,7 @@ const TrendChart = ({ data }) => (
         tick={{ fontSize: 12, fill: '#718096' }}
         tickLine={false}
         axisLine={false}
+        domain={[0, 'dataMax + 10']}
       />
       <Tooltip
         contentStyle={{
@@ -83,8 +82,9 @@ const TrendChart = ({ data }) => (
           borderRadius: '8px',
           boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
         }}
+        formatter={(value) => [`${value} logs`, 'Valeur']}
+        labelFormatter={(label) => `Date: ${label}`}
       />
-      {/* Utiliser 'logs' comme dataKey pour correspondre aux données transformées */}
       <Area
         type="monotone"
         dataKey="logs"
@@ -92,8 +92,13 @@ const TrendChart = ({ data }) => (
         fill="url(#colorLogs)"
         fillOpacity={0.3}
         strokeWidth={2}
-        dot={{ r: 3, strokeWidth: 2, fill: '#fff' }}
-        activeDot={{ r: 5, strokeWidth: 0 }}
+        dot={{ r: 5, fill: '#8884d8', stroke: '#fff', strokeWidth: 2 }}
+        activeDot={{ r: 8, fill: '#fff', stroke: '#8884d8', strokeWidth: 2 }}
+        label={({ x, y, value }) => (
+          <text x={x} y={y - 10} fontSize={10} fill="#8884d8" textAnchor="middle">
+            {value}
+          </text>
+        )}
       />
       <defs>
         <linearGradient id="colorLogs" x1="0" y1="0" x2="0" y2="1">
@@ -116,7 +121,7 @@ const LogLevelChart = ({ data }) => (
         outerRadius={80}
         fill="#8884d8"
         dataKey="value"
-        label={({ name, percent }) => `${name?.toUpperCase() || name} ${(percent * 100).toFixed(0)}%`}
+        label={({ name, percent }) => `${name?.toUpperCase()} ${(percent * 100).toFixed(0)}%`}
       >
         {data.map((entry, index) => (
           <Cell key={`cell-${index}`} fill={entry.color} />
@@ -136,7 +141,7 @@ const LogLevelChart = ({ data }) => (
 );
 
 const MetricBar = ({ name, value, color, unavailable = false }) => (
-  <Box mb={2}>
+  <Box mb={2} key={name}>
     <Box display="flex" justifyContent="space-between" alignItems="center" mb={0.5}>
       <Typography variant="body2" fontWeight="500">
         {name} {unavailable && <span style={{ color: '#90a4ae' }}>(N/A)</span>}
@@ -146,7 +151,7 @@ const MetricBar = ({ name, value, color, unavailable = false }) => (
       </Typography>
     </Box>
     <LinearProgress
-      variant={unavailable ? "determinate" : "determinate"}
+      variant="determinate"
       value={unavailable ? 0 : value}
       sx={{
         height: 8,
@@ -160,8 +165,8 @@ const MetricBar = ({ name, value, color, unavailable = false }) => (
     />
   </Box>
 );
-// --- Fin des composants réutilisables ---
 
+// === Dashboard Principal ===
 const Dashboard = () => {
   const [stats, setStats] = useState({
     totalLogs: 0,
@@ -176,6 +181,7 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  // Charger les stats
   useEffect(() => {
     fetchStats();
   }, []);
@@ -184,12 +190,10 @@ const Dashboard = () => {
     setLoading(true);
     setError('');
     try {
-      // Appeler l'endpoint /stats du backend (chemin relatif car l'URL de base est définie dans logsAPI)
       const response = await logsAPI.get('/stats');
-      console.log("Données brutes des statistiques reçues du backend:", response.data);
       const data = response.data;
 
-      // Mettre à jour les statistiques principales
+      // --- Statistiques ---
       setStats({
         totalLogs: parseInt(data.totalLogs, 10) || 0,
         todayLogs: parseInt(data.todayLogs, 10) || 0,
@@ -197,47 +201,47 @@ const Dashboard = () => {
         systemHealth: parseFloat(data.systemHealth) || 50,
       });
 
-      // Adapter logLevelData
+      // --- Niveaux ---
+      const levelColors = { info: '#2196f3', warning: '#ff9800', error: '#f44336' };
       const adaptedLogLevelData = (data.logLevelData || []).map(item => ({
-        ...item,
-        name: item.name?.toUpperCase() || item.name
+        name: item.name || 'Inconnu',
+        value: item.value || 0,
+        color: levelColors[item.name.toLowerCase()] || '#9e9e9e',
       }));
       setLogLevelData(adaptedLogLevelData);
 
-      // Adapter logTrendData
-      const adaptedLogTrendData = (data.logTrendData || []).map(item => {
-        const totalLogsForDay = (item.info || 0) + (item.warnings || 0) + (item.errors || 0);
-        let formattedTime = item.time;
-        if (item.time) {
-            const parts = item.time.split('-');
-            if (parts.length === 3) {
-                formattedTime = `${parts[2]}/${parts[1]}`;
-            }
-        }
-        return {
-          time: formattedTime,
-          logs: totalLogsForDay
-        };
-      });
+      // --- Tendance ---
+      const adaptedLogTrendData = (data.logTrendData || [])
+        .map(item => {
+          const logs = item.logs || 0;
+          const [day, month] = item.time.split('/').map(Number);
+          if (isNaN(day) || isNaN(month)) return null;
+          const year = new Date().getFullYear();
+          const date = new Date(year, month - 1, day);
+          if (isNaN(date.getTime())) return null;
+          const formattedTime = date.toLocaleDateString('fr-FR', {
+            day: 'numeric',
+            month: 'short'
+          }).replace('.', '');
+          return { time: formattedTime, logs, rawDate: date };
+        })
+        .filter(Boolean)
+        .sort((a, b) => a.rawDate - b.rawDate);
+
       setLogTrendData(adaptedLogTrendData);
 
-      // Utiliser systemMetrics directement
+      // --- Métriques ---
       setSystemMetrics(data.systemMetrics || []);
 
-      // Stocker lastUpdate
+      // --- Dernière mise à jour ---
       if (data.lastUpdate) {
-          setLastUpdate(data.lastUpdate);
+        setLastUpdate(data.lastUpdate);
       }
+
       setLoading(false);
     } catch (err) {
-      console.error("Erreur détaillée lors de la récupération des statistiques:", err);
-      if (err.response) {
-        setError(`Erreur ${err.response.status} du serveur: ${err.response.data?.message || err.response.statusText}`);
-      } else if (err.request) {
-        setError("Impossible de contacter le serveur pour récupérer les statistiques. Vérifiez votre connexion et que le backend est démarré.");
-      } else {
-        setError(`Erreur: ${err.message}`);
-      }
+      console.error('Erreur de chargement:', err);
+      setError('Impossible de charger les données. Vérifiez le backend.');
       setLoading(false);
     }
   };
@@ -253,13 +257,15 @@ const Dashboard = () => {
   if (error) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
-        <Alert severity="error">{error}</Alert>
+        <Alert severity="error" sx={{ width: '80%' }}>
+          {error}
+        </Alert>
       </Box>
     );
   }
 
   return (
-    <Box>
+    <Box p={3}>
       {/* Header */}
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
         <Box>
@@ -281,10 +287,8 @@ const Dashboard = () => {
             sx={{
               background: 'linear-gradient(45deg, #e91e63, #9c27b0)',
               color: 'white',
-              '&:hover': {
-                background: 'linear-gradient(45deg, #d81b60, #8e24aa)',
-              },
-              boxShadow: '0 4px 12px rgba(233, 30, 99, 0.3)',
+              '&:hover': { background: 'linear-gradient(45deg, #d81b60, #8e24aa)' },
+              boxShadow: '0 4px 12px rgba(233,30,99,0.3)',
             }}
           >
             <Refresh />
@@ -292,7 +296,19 @@ const Dashboard = () => {
         </motion.div>
       </Box>
 
-      {/* Statistiques Principales */}
+      {/* Alertes */}
+      {stats.todayLogs === 0 && (
+        <Alert severity="warning" sx={{ mb: 3 }}>
+          ⚠️ Aucun log enregistré aujourd’hui.
+        </Alert>
+      )}
+      {stats.errorRate > 30 && (
+        <Alert severity="error" sx={{ mb: 3 }}>
+          ❌ Taux d’erreur élevé : {stats.errorRate.toFixed(2)}%
+        </Alert>
+      )}
+
+      {/* Statistiques */}
       <Grid container spacing={3} mb={4}>
         <Grid item xs={12} sm={6} md={3}>
           <StatCard
@@ -327,7 +343,7 @@ const Dashboard = () => {
             value={`${stats.systemHealth.toFixed(0)}%`}
             subtitle="Performance globale"
             icon={<CheckCircle />}
-            color={stats.systemHealth > 70 ? "#4caf50" : (stats.systemHealth > 30 ? "#ff9800" : "#f44336")}
+            color={stats.systemHealth > 70 ? '#4caf50' : stats.systemHealth > 30 ? '#ff9800' : '#f44336'}
           />
         </Grid>
       </Grid>
@@ -345,13 +361,14 @@ const Dashboard = () => {
                   <TrendChart data={logTrendData} />
                 ) : (
                   <Box display="flex" justifyContent="center" alignItems="center" height="80%">
-                    <Typography color="text.secondary">Aucune donnée de tendance disponible</Typography>
+                    <Typography color="text.secondary">Aucune donnée disponible</Typography>
                   </Box>
                 )}
               </CardContent>
             </Card>
           </motion.div>
         </Grid>
+
         <Grid item xs={12} md={4}>
           <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.5 }}>
             <Card sx={{ height: 400 }}>
@@ -363,13 +380,14 @@ const Dashboard = () => {
                   <LogLevelChart data={logLevelData} />
                 ) : (
                   <Box display="flex" justifyContent="center" alignItems="center" height="80%">
-                    <Typography color="text.secondary">Aucune donnée de niveau disponible</Typography>
+                    <Typography color="text.secondary">Aucune donnée</Typography>
                   </Box>
                 )}
               </CardContent>
             </Card>
           </motion.div>
         </Grid>
+
         <Grid item xs={12}>
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.2 }}>
             <Card>
@@ -378,17 +396,16 @@ const Dashboard = () => {
                   Métriques Système
                 </Typography>
                 {systemMetrics.length > 0 ? (
-                  systemMetrics.map((metric, index) => (
+                  systemMetrics.map((metric) => (
                     <MetricBar
-                      key={index}
+                      key={metric.name}
                       name={metric.name}
                       value={metric.value}
                       color={metric.color}
-                      unavailable={metric.unavailable}
                     />
                   ))
                 ) : (
-                  <Typography color="text.secondary">Aucune métrique système disponible</Typography>
+                  <Typography color="text.secondary">Aucune métrique disponible</Typography>
                 )}
               </CardContent>
             </Card>
